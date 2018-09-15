@@ -1,12 +1,12 @@
 // Copyright 1998-2017 Epic Games, Inc. All Rights Reserved.
 
 #include "FirstPersonCharacter.h"
-#include "Animation/AnimInstance.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/InputComponent.h"
 #include "Camera/CameraComponent.h"
-#include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
+#include "../Weapons/Gun.h"
+#include "Components/SkeletalMeshComponent.h"
 
 #define COLLISION_WEAPON		ECC_GameTraceChannel1
 
@@ -37,13 +37,6 @@ AFirstPersonCharacter::AFirstPersonCharacter()
 	Mesh1P->bCastDynamicShadow = false;			// Disallow mesh to cast dynamic shadows
 	Mesh1P->CastShadow = false;				// Disallow mesh to cast other shadows
 
-	// Create a gun mesh component
-	FP_Gun = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FP_Gun"));
-	FP_Gun->SetOnlyOwnerSee(true);			// Only the owning player will see this mesh
-	FP_Gun->bCastDynamicShadow = false;		// Disallow mesh to cast dynamic shadows
-	FP_Gun->CastShadow = false;			// Disallow mesh to cast other shadows
-	FP_Gun->SetupAttachment(Mesh1P, TEXT("GripPoint"));
-
 	// Set weapon damage and range
 	WeaponRange = 5000.0f;
 	WeaponDamage = 500000.0f;
@@ -53,6 +46,24 @@ AFirstPersonCharacter::AFirstPersonCharacter()
 
 	// Note: The ProjectileClass and the skeletal mesh/anim blueprints for Mesh1P are set in the
 	// derived blueprint asset named MyCharacter (to avoid direct content references in C++)
+}
+
+// Called when the game starts or when spawned
+void AFirstPersonCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (GunBlueprint == NULL) {
+		UE_LOG(LogTemp, Warning, TEXT("Gun Missing"));
+		return;
+	}
+
+	Gun = GetWorld()->SpawnActor<AGun>(GunBlueprint);
+	Gun->AttachToComponent(Mesh1P, FAttachmentTransformRules(EAttachmentRule::SnapToTarget, true), TEXT("GripPoint"));
+	Gun->AnimInstance = Mesh1P->GetAnimInstance();
+	// Bind fire event
+	InputComponent->BindAction("Fire", IE_Pressed, Gun, &AGun::OnFire);
+
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -68,9 +79,6 @@ void AFirstPersonCharacter::SetupPlayerInputComponent(class UInputComponent* Pla
 	// Bind jump events
 	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
 	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
-	
-	// Bind fire event
-	PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &AFirstPersonCharacter::OnFire);
 	
 	// Attempt to enable touch screen movement
 	TryEnableTouchscreenMovement(PlayerInputComponent);
@@ -88,62 +96,6 @@ void AFirstPersonCharacter::SetupPlayerInputComponent(class UInputComponent* Pla
 	PlayerInputComponent->BindAxis("LookUpRate", this, &AFirstPersonCharacter::LookUpAtRate);
 }
 
-void AFirstPersonCharacter::OnFire()
-{
-	// Play a sound if there is one
-	if (FireSound != NULL)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation());
-	}
-
-	// Try and play a firing animation if specified
-	if(FireAnimation != NULL)
-	{
-		// Get the animation object for the arms mesh
-		UAnimInstance* AnimInstance = Mesh1P->GetAnimInstance();
-		if(AnimInstance != NULL)
-		{
-			AnimInstance->Montage_Play(FireAnimation, 1.f);
-		}
-	}
-
-	// Now send a trace from the end of our gun to see if we should hit anything
-	APlayerController* PlayerController = Cast<APlayerController>(GetController());
-	
-	// Calculate the direction of fire and the start location for trace
-	FVector CamLoc;
-	FRotator CamRot;
-	PlayerController->GetPlayerViewPoint(CamLoc, CamRot);
-	const FVector ShootDir = CamRot.Vector();
-
-	FVector StartTrace = FVector::ZeroVector;
-	if (PlayerController)
-	{
-		FRotator UnusedRot;
-		PlayerController->GetPlayerViewPoint(StartTrace, UnusedRot);
-
-		// Adjust trace so there is nothing blocking the ray between the camera and the pawn, and calculate distance from adjusted start
-		StartTrace = StartTrace + ShootDir * ((GetActorLocation() - StartTrace) | ShootDir);
-	}
-
-	// Calculate endpoint of trace
-	const FVector EndTrace = StartTrace + ShootDir * WeaponRange;
-
-	// Check for impact
-	const FHitResult Impact = WeaponTrace(StartTrace, EndTrace);
-
-	// Deal with impact
-	AActor* DamagedActor = Impact.GetActor();
-	UPrimitiveComponent* DamagedComponent = Impact.GetComponent();
-
-	// If we hit an actor, with a component that is simulating physics, apply an impulse
-	if ((DamagedActor != NULL) && (DamagedActor != this) && (DamagedComponent != NULL) && DamagedComponent->IsSimulatingPhysics())
-	{
-		DamagedComponent->AddImpulseAtLocation(ShootDir*WeaponDamage, Impact.Location);
-	}
-}
-
-
 void AFirstPersonCharacter::BeginTouch(const ETouchIndex::Type FingerIndex, const FVector Location)
 {
 	// If touch is already pressed check the index. If it is not the same as the current touch assume a second touch and thus we want to fire
@@ -151,7 +103,7 @@ void AFirstPersonCharacter::BeginTouch(const ETouchIndex::Type FingerIndex, cons
 	{
 		if( TouchItem.FingerIndex != FingerIndex)
 		{
-			OnFire();			
+			//OnFire();			
 		}
 	}
 	else 
@@ -175,7 +127,7 @@ void AFirstPersonCharacter::EndTouch(const ETouchIndex::Type FingerIndex, const 
 	// If the index matches the start index and we didn't process any movement we assume we want to fire
 	if ((FingerIndex == TouchItem.FingerIndex) && (TouchItem.bMoved == false))
 	{
-		OnFire();
+		//OnFire();
 	}
 
 	// Flag we are no longer processing the touch event

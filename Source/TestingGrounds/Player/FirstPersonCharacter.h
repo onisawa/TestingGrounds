@@ -9,8 +9,6 @@
 class UInputComponent;
 class UCameraComponent;
 class USkeletalMeshComponent;
-class USoundBase;
-class UAnimMontage;
 
 UCLASS(config=Game)
 class AFirstPersonCharacter : public ACharacter
@@ -20,10 +18,6 @@ class AFirstPersonCharacter : public ACharacter
 	/** Pawn mesh: 1st person view (arms; seen only by self) */
 	UPROPERTY(VisibleDefaultsOnly, Category=Mesh)
 	USkeletalMeshComponent* Mesh1P;
-
-	/** Gun mesh */
-	UPROPERTY(VisibleDefaultsOnly, Category = Mesh)
-	USkeletalMeshComponent* FP_Gun;
 
 	/** First person camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
@@ -44,14 +38,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Gameplay)
 	FVector GunOffset;
 
-	/** Sound to play each time we fire */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Gameplay)
-	USoundBase* FireSound;
-
-	/** AnimMontage to play each time we fire */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
-	UAnimMontage* FireAnimation;
-
 	/* This is when calculating the trace to determine what the weapon has hit */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
 	float WeaponRange;
@@ -60,13 +46,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
 	float WeaponDamage;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Setup")
+	TSubclassOf<class AGun> GunBlueprint;
+
+private:
+	AGun* Gun;
+
 protected:
+	// Called when the game starts or when spawned
+	virtual void BeginPlay() override;
 
 	/** Handler for a touch input beginning. */
 	void TouchStarted(const ETouchIndex::Type FingerIndex, const FVector Location);
-
-	/** Fires a virtual projectile. */
-	void OnFire();
 
 	/** Handles moving forward/backward */
 	void MoveForward(float Val);
